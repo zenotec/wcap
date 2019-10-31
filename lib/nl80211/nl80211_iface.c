@@ -24,8 +24,6 @@ static int _get_valid_cb(struct nl_msg* msg, void* arg)
     struct nlmsghdr *nlhdr = nlmsg_hdr(msg);
     struct genlmsghdr *gnlh = nlmsg_data(nlhdr);
 
-    fprintf(stdout, "[%d] %s(%p, %p)\n", __LINE__, __FUNCTION__, msg, arg);
-
     // Parse all the attributes into the attribute table
     nla_parse(tb, CTRL_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
@@ -44,18 +42,15 @@ static int _get_valid_cb(struct nl_msg* msg, void* arg)
 
 static int _get_finish_cb(struct nl_msg* msg, void* arg)
 {
-    fprintf(stdout, "[%d] %s(%p, %p)\n", __LINE__, __FUNCTION__, msg, arg);
     return NL_STOP;
 }
 
 static int _new_valid_cb(struct nl_msg* msg, void* arg)
 {
-    fprintf(stdout, "[%d] %s(%p, %p)\n", __LINE__, __FUNCTION__, msg, arg);
     return NL_OK;
 }
 
-
-bool nl80211_wiface_new(WcapWifaceInfo_t* info)
+bool WcapNL80211WifaceCreate(WcapWifaceInfo_t* info)
 {
 
     struct nl_msg* msg = NULL;
@@ -70,7 +65,7 @@ bool nl80211_wiface_new(WcapWifaceInfo_t* info)
     }
 
     // Create 'get interface' command message
-    msg = WcapNl80211NewMsg(NL80211_CMD_NEW_INTERFACE, 0);
+    msg = WcapNL80211NewMsg(NL80211_CMD_NEW_INTERFACE, 0);
     if (msg == NULL)
     {
         return false;
@@ -120,7 +115,7 @@ bool nl80211_wiface_new(WcapWifaceInfo_t* info)
     return true;
 }
 
-bool nl80211_wiface_del(WcapWifaceInfo_t* info)
+bool WcapNL80211WifaceDelete(WcapWifaceInfo_t* info)
 {
 
     struct nl_msg* msg = NULL;
@@ -135,7 +130,7 @@ bool nl80211_wiface_del(WcapWifaceInfo_t* info)
     }
 
     // Create 'get interface' command message
-    msg = WcapNl80211NewMsg(NL80211_CMD_DEL_INTERFACE, 0);
+    msg = WcapNL80211NewMsg(NL80211_CMD_DEL_INTERFACE, 0);
     if (msg == NULL)
     {
         return false;
@@ -170,25 +165,18 @@ bool nl80211_wiface_del(WcapWifaceInfo_t* info)
     return true;
 }
 
-bool nl80211_wiface_get(const char* ifname, WcapWifaceInfo_t* info)
+bool WcapNL80211WifaceGet(const char* ifname, WcapWifaceInfo_t* info)
 {
 
-    unsigned int ifindex = 0;
     struct nl_msg* msg = NULL;
 
-    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
-
-    // Lookup interface index by name
-    ifindex = if_nametoindex(ifname);
-    if (!ifindex)
+    // Get interface information
+    if (!WcapIfaceInfoGet(ifname, &info->iface))
     {
         // Don't print error message because the caller may only want to check if
         //   the interface exists or not
         return false;
     }
-
-    // Initialized caller struct
-    memset(info, 0, sizeof(WcapWifaceInfo_t));
 
     // Install callback
     if (!WcapGENLSetCallback(NL_CB_VALID, _get_valid_cb, info))
@@ -203,13 +191,13 @@ bool nl80211_wiface_get(const char* ifname, WcapWifaceInfo_t* info)
     }
 
     // Create 'get interface' command message
-    msg = WcapNl80211NewMsg(NL80211_CMD_GET_INTERFACE, 0);
+    msg = WcapNL80211NewMsg(NL80211_CMD_GET_INTERFACE, 0);
     if (msg == NULL)
     {
         return false;
     }
 
-    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, ifindex) != 0)
+    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, info->iface.ifindex) != 0)
     {
         fprintf(stderr, "Error adding interface index\n");
         return false;
@@ -241,6 +229,6 @@ bool nl80211_wiface_get(const char* ifname, WcapWifaceInfo_t* info)
 
     fprintf(stdout, "[%d] %s()\n", __LINE__, __FUNCTION__);
 
-    return nl80211_phyinfo_get(info->phy.phyindex, &info->phy);
+    return WcapNL80211PhyInfoGet(info->phy.phyindex, &info->phy);
 
 }

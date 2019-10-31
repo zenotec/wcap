@@ -10,6 +10,8 @@
 
 #include <unistd.h>
 
+#include <net/if.h>
+
 #include "netlink.h"
 
 struct _nlcb
@@ -178,6 +180,11 @@ bool WcapNetlinkDisconnect(const uint8_t proto)
     return true;
 }
 
+struct nl_sock* WcapNetlinkSocket(const uint8_t proto)
+{
+    return nlCtx[proto].sock;
+}
+
 bool WcapNetlinkSetCallback(const uint8_t proto, const enum nl_cb_type type, void* cb, void* arg)
 {
     bool status = true;
@@ -315,6 +322,9 @@ bool WcapNetlinkRecvMsg(const uint8_t proto)
     return true;
 
 }
+
+// General netlink wrappers
+
 bool WcapGENLConnect()
 {
     return WcapNetlinkConnect(NETLINK_GENERIC);
@@ -323,6 +333,11 @@ bool WcapGENLConnect()
 bool WcapGENLDisconnect()
 {
     return WcapNetlinkDisconnect(NETLINK_GENERIC);
+}
+
+struct nl_sock* WcapGENLSocket()
+{
+    return WcapNetlinkSocket(NETLINK_GENERIC);
 }
 
 bool WcapGENLSetCallback(const enum nl_cb_type type, void* cb, void* arg)
@@ -371,7 +386,24 @@ bool WcapGENLSendMsg(struct nl_msg* msg)
     return WcapNetlinkSendMsg(NETLINK_GENERIC, msg);
 }
 
+// Route netlink wrappers
+
 bool WcapGENLRecvMsg()
 {
     return WcapNetlinkRecvMsg(NETLINK_GENERIC);
+}
+
+bool WcapRTNLConnect()
+{
+    return WcapNetlinkConnect(NETLINK_ROUTE);
+}
+
+bool WcapRTNLDisconnect()
+{
+    return WcapNetlinkDisconnect(NETLINK_ROUTE);
+}
+
+struct nl_sock* WcapRTNLSocket()
+{
+    return WcapNetlinkSocket(NETLINK_ROUTE);
 }

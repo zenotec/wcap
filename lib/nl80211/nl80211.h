@@ -1,3 +1,13 @@
+/*
+ ============================================================================
+ Name        : nl80211.h
+ Author      : Kevin Mahoney <kevin.mahoney@zenotec.net>
+ Version     :
+ Copyright   : Your copyright notice
+ Description : Wireless packet capture and forwarder
+ ============================================================================
+ */
+
 #ifndef _NL80211_H_
 #define _NL80211_H_
 
@@ -7,6 +17,7 @@
 #include <net/if.h>
 #include <linux/nl80211.h>
 
+#include "iface.h"
 #include "netlink.h"
 
 typedef struct WcapPhyInfo
@@ -21,24 +32,25 @@ typedef struct WcapWifaceInfo
     char ifname[IF_NAMESIZE + 1];
     int iftype;
     WcapPhyInfo_t phy;
+    WcapIfaceInfo_t iface;
 } WcapWifaceInfo_t;
 
 
-bool WcapNl80211Connect();
-bool WcapNl80211Disconnect();
+bool WcapNL80211Connect();
+bool WcapNL80211Disconnect();
 
-bool WcapNl80211SetCallback(const enum nl_cb_type type, void* cb, void* arg);
-bool WcapNl80211ClrCallback(const enum nl_cb_type type);
+bool WcapNL80211SetCallback(const enum nl_cb_type type, void* cb, void* arg);
+bool WcapNL80211ClrCallback(const enum nl_cb_type type);
 
-struct nl_msg* WcapNl80211NewMsg(const int cmd, const int flags);
+struct nl_msg* WcapNL80211NewMsg(const int cmd, const int flags);
 
-bool nl80211_phyinfo_dump(WcapPhyInfo_t** list);
-bool nl80211_phyinfo_get(const int phyindex, WcapPhyInfo_t* info);
-bool nl80211_phyinfo_set(const int phyindex, WcapPhyInfo_t* info);
+bool WcapNL80211PhyInfoDump(WcapPhyInfo_t** list);
+bool WcapNL80211PhyInfoGet(const int phyindex, WcapPhyInfo_t* info);
+bool WcapNL80211PhyInfoSet(const int phyindex, WcapPhyInfo_t* info);
 
-bool nl80211_wiface_new(WcapWifaceInfo_t* info);
-bool nl80211_wiface_del(WcapWifaceInfo_t* info);
-bool nl80211_wiface_get(const char* ifname, WcapWifaceInfo_t* info);
+bool WcapNL80211WifaceCreate(WcapWifaceInfo_t* info);
+bool WcapNL80211WifaceDelete(WcapWifaceInfo_t* info);
+bool WcapNL80211WifaceGet(const char* ifname, WcapWifaceInfo_t* info);
 bool nl80211_wiface_set(const char* ifname, WcapWifaceInfo_t* info);
 
 bool nl80211_wiface_scan(const char* ifname);

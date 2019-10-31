@@ -1,6 +1,6 @@
 /*
  ============================================================================
- Name        : wcap.c
+ Name        : wcap.h
  Author      : Kevin Mahoney <kevin.mahoney@zenotec.net>
  Version     :
  Copyright   : Your copyright notice

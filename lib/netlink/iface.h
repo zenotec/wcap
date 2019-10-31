@@ -14,12 +14,20 @@
 #include <net/if.h>
 #include <netinet/if_ether.h>
 
-typedef struct iface_info
-{
-    int ifindex;
-    char ifname[IF_NAMESIZE + 1];
-    char hwaddr[ETH_ALEN];
-} iface_info_t;
+#include "netlink.h"
 
+typedef struct WcapIfaceInfo
+{
+    unsigned int ifindex;
+    char ifname[IF_NAMESIZE + 1];
+    unsigned char hwaddr[ETH_ALEN];
+    unsigned int mtu;
+} WcapIfaceInfo_t;
+
+bool WcapIfaceInfoGet(const char* ifname, WcapIfaceInfo_t* info);
+bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info);
+
+bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr);
+bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr);
 
 #endif /* _IFACE_H_ */

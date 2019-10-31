@@ -65,7 +65,7 @@ static int _phyinfo_finish_cb(struct nl_msg* msg, void* arg)
     return NL_STOP;
 }
 
-bool nl80211_phyinfo_dump(WcapPhyInfo_t** list)
+bool WcapNL80211PhyInfoDump(WcapPhyInfo_t** list)
 {
 
     struct nl_msg* msg = NULL;
@@ -85,7 +85,7 @@ bool nl80211_phyinfo_dump(WcapPhyInfo_t** list)
     }
 
     // Create 'get phy' command message
-    msg = WcapGENLNewMsg(NL80211_GENL_NAME, NL80211_CMD_GET_WIPHY, NLM_F_DUMP);
+    msg = WcapNL80211NewMsg(NL80211_CMD_GET_WIPHY, NLM_F_DUMP);
     if (msg == NULL)
     {
         return false;
@@ -118,7 +118,7 @@ bool nl80211_phyinfo_dump(WcapPhyInfo_t** list)
     return true;
 }
 
-bool nl80211_phyinfo_get(const int phyindex, WcapPhyInfo_t* info)
+bool WcapNL80211PhyInfoGet(const int phyindex, WcapPhyInfo_t* info)
 {
 
     struct nl_msg* msg = NULL;
@@ -139,7 +139,7 @@ bool nl80211_phyinfo_get(const int phyindex, WcapPhyInfo_t* info)
     }
 
     // Create 'get phy' command message
-    msg = WcapNl80211NewMsg(NL80211_CMD_GET_WIPHY, 0);
+    msg = WcapNL80211NewMsg(NL80211_CMD_GET_WIPHY, 0);
     if (msg == NULL)
     {
         return false;
