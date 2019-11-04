@@ -20,6 +20,9 @@ typedef struct WcapIfaceInfo
 {
     unsigned int ifindex;
     char ifname[IF_NAMESIZE + 1];
+    uint32_t flags;
+    uint8_t opstate;
+    uint8_t linkstate;
     unsigned char hwaddr[ETH_ALEN];
     unsigned int mtu;
 } WcapIfaceInfo_t;

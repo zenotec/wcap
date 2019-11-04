@@ -32,8 +32,10 @@
 static struct wcap_ctx
 {
     int rawSock;
+    int rawSockIdx;
     struct sockaddr_ll monAddr;
     int udpSock;
+    int udpSockIdx;
     struct sockaddr_in srcAddr;
     struct sockaddr_in dstAddr;
 } gCtx = { 0 };
@@ -43,11 +45,10 @@ void usage(const char* name)
     fprintf(stdout, "Utility to capture wireless packets from a local wireless\n");
     fprintf(stdout, "  interface and forward over a LAN to another instance\n");
     fprintf(stdout, "  which injects them into local wireless interface\n\n");
-    fprintf(stdout, "Usage: %s { [-h] [-a <address> ] -c | -s } WIFACE IFACE \n", name);
+    fprintf(stdout, "Usage: %s { [-h] -s | -c <address> } WIFACE IFACE \n", name);
     fprintf(stdout, "\t-h                 \tDisplay usage\n");
-    fprintf(stdout, "\t-c                 \tOperate in client mode\n");
     fprintf(stdout, "\t-s                 \tOperate in server mode\n");
-    fprintf(stdout, "\t-a <address>       \tIP address to use\n");
+    fprintf(stdout, "\t-c <address>       \tOperate in client mode\n");
 }
 
 static bool do_server(const char* wiface, const char* iface)
@@ -111,12 +112,21 @@ static bool do_server(const char* wiface, const char* iface)
         fprintf(stdout, "Failed to add link local address to interface: %s\n", iface);
     }
 
+    // Set the interface's state to administratively up
+    iface_info.flags |= (IFF_UP | IFF_RUNNING);
+    if (!WcapIfaceInfoSet(iface, &iface_info))
+    {
+        fprintf(stderr, "Failed to bring interface '%s' up\n", iface);
+        status = false;
+        goto exit_del_addr;
+    }
+
     // Retrieve information about wireless interface
     if (!WcapNL80211WifaceGet(wiface, &wiface_info) && !WcapNL80211WifaceGet(wiface, &wiface_info))
     {
         fprintf(stderr, "Failed to find interface: %s\n", wiface);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
 
     fprintf(stdout, "Found wireless interface: [%d] %s (%02x:%02x:%02x:%02x:%02x:%02x)\n",
@@ -138,14 +148,23 @@ static bool do_server(const char* wiface, const char* iface)
         {
             fprintf(stderr, "Failed to create monitor interface: %s\n", monitor_info.ifname);
             status = false;
-            goto exit_fail;
+            goto exit_del_addr;
         }
         if (!WcapNL80211WifaceGet(monitor_info.ifname, &monitor_info))
         {
             fprintf(stderr, "Failed to retrieve monitor interface info: %s\n", monitor_info.ifname);
             status = false;
-            goto exit_fail;
+            goto exit_del_addr;
         }
+    }
+
+    // Set the monitor interface's state to administratively up
+    monitor_info.iface.flags |= (IFF_UP | IFF_RUNNING);
+    if (!WcapIfaceInfoSet(monitor_info.ifname, &monitor_info.iface))
+    {
+        fprintf(stderr, "Failed to bring interface '%s' up\n", iface);
+        status = false;
+        goto exit_del_addr;
     }
 
     // Open raw socket for sending / receiving on monitor interface
@@ -155,7 +174,7 @@ static bool do_server(const char* wiface, const char* iface)
         fprintf(stderr, "Failed to open raw socket on monitor interface: %s\n",
                         monitor_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
     fprintf(stdout, "Opened socket [%d] for listening on monitor interface: %s\n", gCtx.rawSock,
                     monitor_info.ifname);
@@ -171,7 +190,7 @@ static bool do_server(const char* wiface, const char* iface)
     {
         fprintf(stderr, "Failed to bind socket to monitor interface: %s\n", monitor_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
 
     // Open UDP socket for sending / receiving encapsulated 80211 frames
@@ -180,7 +199,7 @@ static bool do_server(const char* wiface, const char* iface)
     {
         fprintf(stderr, "Failed to open UDP socket on Ethernet interface: %s\n", iface_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
     fprintf(stdout, "Opened socket [%d] for listening on Ethernet interface: %s\n", gCtx.udpSock,
                     iface_info.ifname);
@@ -195,15 +214,22 @@ static bool do_server(const char* wiface, const char* iface)
     {
         fprintf(stderr, "Failed to bind socket to monitor interface: %s\n", monitor_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
 
+    //-------------------------------------------------------------------------
     // Set up to listen on both sockets
+    //-------------------------------------------------------------------------
+
     nfds = 0;
-    fds[nfds].fd = gCtx.rawSock;
-    fds[nfds++].events = (POLLIN | POLLERR);
-    fds[nfds].fd = gCtx.udpSock;
-    fds[nfds++].events = (POLLIN | POLLERR);
+
+    gCtx.udpSockIdx = nfds++;
+    fds[gCtx.udpSockIdx].fd = gCtx.udpSock;
+    fds[gCtx.udpSockIdx].events = (POLLIN | POLLERR);
+
+    gCtx.rawSockIdx = nfds++;
+    fds[gCtx.rawSockIdx].fd = gCtx.rawSock;
+    fds[gCtx.rawSockIdx].events = (POLLIN | POLLERR);
 
     while (true)
     {
@@ -216,13 +242,6 @@ static bool do_server(const char* wiface, const char* iface)
         }
         for (int i = 0; i < nfds; i++)
         {
-            if (fds[i].revents & POLLIN)
-            {
-                char buf[8192] = { 0 };
-                fprintf(stdout, "Socket [%d] ready to receive\n", fds[i].fd);
-                recvfrom(fds[i].fd, &buf, sizeof(buf), 0, NULL, 0);
-                continue;
-            }
             if (fds[i].revents & POLLERR)
             {
                 fprintf(stderr, "Socket [%d] encountered an error: [%d] %s\n", fds[i].fd, errno,
@@ -231,16 +250,36 @@ static bool do_server(const char* wiface, const char* iface)
                 goto exit_del_addr;
             }
         }
+        if (fds[gCtx.udpSockIdx].revents & POLLIN)
+        {
+            char buf[8192] = { 0 };
+            int addrlen = sizeof(gCtx.dstAddr);
+            int cnt = recvfrom(fds[gCtx.udpSockIdx].fd, &buf, sizeof(buf), 0, (struct sockaddr*) &gCtx.dstAddr, &addrlen);
+            fprintf(stdout, "Received %d bytes on UDP socket: %d\n", cnt, fds[gCtx.udpSockIdx].fd);
+            cnt = sendto(gCtx.rawSock, buf, cnt, 0, NULL, 0);
+            fprintf(stdout, "Sent %d bytes on Raw socket: %d\n", cnt, fds[gCtx.rawSockIdx].fd);
+        }
+        if (fds[gCtx.rawSockIdx].revents & POLLIN)
+        {
+            char buf[8192] = { 0 };
+            int cnt = recvfrom(fds[gCtx.rawSockIdx].fd, &buf, sizeof(buf), 0, NULL, NULL);
+            fprintf(stdout, "Received %d bytes on Raw socket: %d\n", cnt, fds[gCtx.rawSockIdx].fd);
+            if (gCtx.dstAddr.sin_addr.s_addr)
+            {
+                cnt = sendto(gCtx.udpSock, buf, cnt, 0, (struct sockaddr*) &gCtx.dstAddr, sizeof(gCtx.dstAddr));
+                fprintf(stdout, "Sent %d bytes on UDP socket: %d\n", cnt, fds[gCtx.udpSockIdx].fd);
+            }
+        }
     }
 
-    exit_del_addr:
+exit_del_addr:
 
     if (!WcapIfaceInetAddrRemove(iface, addr))
     {
         fprintf(stdout, "Failed to remove link local address from interface: %s\n", iface);
     }
 
-    exit_fail:
+exit_fail:
 
     if (gCtx.udpSock != 0)
     {
@@ -299,7 +338,9 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
         return false;
     }
 
+    //-------------------------------------------------------------------------
     // Retrieve information about ethernet interface
+    //-------------------------------------------------------------------------
     if (!WcapIfaceInfoGet(iface, &iface_info))
     {
         fprintf(stderr, "Failed to find interface: %s\n", iface);
@@ -311,6 +352,7 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
                     iface_info.ifindex, iface_info.ifname,
                     iface_info.hwaddr[0], iface_info.hwaddr[1], iface_info.hwaddr[2],
                     iface_info.hwaddr[3], iface_info.hwaddr[4], iface_info.hwaddr[5]);
+    fprintf(stdout, "Flags: 0x%08x\n", iface_info.flags);
 
     // Construct link local address using the last two octets of the interface's MAC
     snprintf(addr, 16, "169.254.%d.%d", iface_info.hwaddr[4], iface_info.hwaddr[5]);
@@ -321,12 +363,52 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
         fprintf(stdout, "Failed to add link local address to interface: %s\n", iface);
     }
 
+    // Set the interface's state to administratively up
+    iface_info.flags |= (IFF_UP | IFF_RUNNING);
+    if (!WcapIfaceInfoSet(iface, &iface_info))
+    {
+        fprintf(stderr, "Failed to bring interface '%s' up\n", iface);
+        status = false;
+        goto exit_del_addr;
+    }
+
+    // Open UDP socket for sending / receiving encapsulated 80211 frames
+    gCtx.udpSock = socket(AF_INET, (SOCK_DGRAM | SOCK_NONBLOCK), 0);
+    if (gCtx.udpSock < 0)
+    {
+        fprintf(stderr, "Failed to open UDP socket on Ethernet interface: %s\n", iface_info.ifname);
+        status = false;
+        goto exit_del_addr;
+    }
+    fprintf(stdout, "Opened socket [%d] for listening on Ethernet interface: %s\n", gCtx.udpSock,
+                    iface_info.ifname);
+
+    // Set up IP address for UDP socket
+    gCtx.srcAddr.sin_family = AF_INET;
+    gCtx.srcAddr.sin_addr.s_addr = inet_addr(addr);
+    gCtx.srcAddr.sin_port = htons(8888);
+
+    // Set up IP address of server
+    gCtx.dstAddr.sin_family = AF_INET;
+    gCtx.dstAddr.sin_addr.s_addr = inet_addr(dst);
+    gCtx.dstAddr.sin_port = htons(8888);
+
+    // Bind UDP socket to link local address
+    if (bind(gCtx.udpSock, (struct sockaddr*) &gCtx.srcAddr, sizeof(gCtx.srcAddr)) < 0)
+    {
+        fprintf(stderr, "Failed to bind socket to monitor interface: %s\n", monitor_info.ifname);
+        status = false;
+        goto exit_del_addr;
+    }
+
+    //-------------------------------------------------------------------------
     // Retrieve information about wireless interface
+    //-------------------------------------------------------------------------
     if (!WcapNL80211WifaceGet(wiface, &wiface_info) && !WcapNL80211WifaceGet(wiface, &wiface_info))
     {
         fprintf(stderr, "Failed to find interface: %s\n", wiface);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
 
     fprintf(stdout, "Found wireless interface: [%d] %s (%02x:%02x:%02x:%02x:%02x:%02x)\n",
@@ -335,6 +417,7 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
                     wiface_info.iface.hwaddr[2],
                     wiface_info.iface.hwaddr[3], wiface_info.iface.hwaddr[4],
                     wiface_info.iface.hwaddr[5]);
+    fprintf(stdout, "Flags: 0x%08x\n", wiface_info.iface.flags);
 
     // Construct name of monitor interface based on PHY index of primary interface
     snprintf(monitor_info.ifname, IF_NAMESIZE, "mon%d", wiface_info.phy.phyindex);
@@ -348,14 +431,23 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
         {
             fprintf(stderr, "Failed to create monitor interface: %s\n", monitor_info.ifname);
             status = false;
-            goto exit_fail;
+            goto exit_del_addr;
         }
         if (!WcapNL80211WifaceGet(monitor_info.ifname, &monitor_info))
         {
             fprintf(stderr, "Failed to retrieve monitor interface info: %s\n", monitor_info.ifname);
             status = false;
-            goto exit_fail;
+            goto exit_del_addr;
         }
+    }
+
+    // Set the monitor interface's state to administratively up
+    monitor_info.iface.flags |= (IFF_UP | IFF_RUNNING);
+    if (!WcapIfaceInfoSet(monitor_info.ifname, &monitor_info.iface))
+    {
+        fprintf(stderr, "Failed to bring interface '%s' up\n", iface);
+        status = false;
+        goto exit_del_addr;
     }
 
     // Open raw socket for sending / receiving on monitor interface
@@ -365,7 +457,7 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
         fprintf(stderr, "Failed to open raw socket on monitor interface: %s\n",
                         monitor_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
     fprintf(stdout, "Opened socket [%d] for listening on monitor interface: %s\n", gCtx.rawSock,
                     monitor_info.ifname);
@@ -381,39 +473,22 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
     {
         fprintf(stderr, "Failed to bind socket to monitor interface: %s\n", monitor_info.ifname);
         status = false;
-        goto exit_fail;
+        goto exit_del_addr;
     }
 
-    // Open UDP socket for sending / receiving encapsulated 80211 frames
-    gCtx.udpSock = socket(AF_INET, (SOCK_DGRAM | SOCK_NONBLOCK), 0);
-    if (gCtx.udpSock < 0)
-    {
-        fprintf(stderr, "Failed to open UDP socket on Ethernet interface: %s\n", iface_info.ifname);
-        status = false;
-        goto exit_fail;
-    }
-    fprintf(stdout, "Opened socket [%d] for listening on Ethernet interface: %s\n", gCtx.udpSock,
-                    iface_info.ifname);
-
-    // Set up IP address for UDP socket
-    gCtx.srcAddr.sin_family = AF_INET;
-    gCtx.srcAddr.sin_addr.s_addr = inet_addr(addr);
-    gCtx.srcAddr.sin_port = htons(8888);
-
-    // Bind UDP socket to link local address
-    if (bind(gCtx.udpSock, (struct sockaddr*) &gCtx.srcAddr, sizeof(gCtx.srcAddr)) < 0)
-    {
-        fprintf(stderr, "Failed to bind socket to monitor interface: %s\n", monitor_info.ifname);
-        status = false;
-        goto exit_fail;
-    }
-
+    //-------------------------------------------------------------------------
     // Set up to listen on both sockets
+    //-------------------------------------------------------------------------
+
     nfds = 0;
-    fds[nfds].fd = gCtx.rawSock;
-    fds[nfds++].events = (POLLIN | POLLERR);
-    fds[nfds].fd = gCtx.udpSock;
-    fds[nfds++].events = (POLLIN | POLLERR);
+
+    gCtx.udpSockIdx = nfds++;
+    fds[gCtx.udpSockIdx].fd = gCtx.udpSock;
+    fds[gCtx.udpSockIdx].events = (POLLIN | POLLERR);
+
+    gCtx.rawSockIdx = nfds++;
+    fds[gCtx.rawSockIdx].fd = gCtx.rawSock;
+    fds[gCtx.rawSockIdx].events = (POLLIN | POLLERR);
 
     while (true)
     {
@@ -426,13 +501,6 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
         }
         for (int i = 0; i < nfds; i++)
         {
-            if (fds[i].revents & POLLIN)
-            {
-                char buf[8192] = { 0 };
-                fprintf(stdout, "Socket [%d] ready to receive\n", fds[i].fd);
-                recvfrom(fds[i].fd, &buf, sizeof(buf), 0, NULL, 0);
-                continue;
-            }
             if (fds[i].revents & POLLERR)
             {
                 fprintf(stderr, "Socket [%d] encountered an error: [%d] %s\n", fds[i].fd, errno,
@@ -441,16 +509,33 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
                 goto exit_del_addr;
             }
         }
+        if (fds[gCtx.udpSockIdx].revents & POLLIN)
+        {
+            char buf[8192] = { 0 };
+            int addrlen = sizeof(gCtx.dstAddr);
+            int cnt = recvfrom(fds[gCtx.udpSockIdx].fd, &buf, sizeof(buf), 0, (struct sockaddr*) &gCtx.dstAddr, &addrlen);
+            fprintf(stdout, "Received %d bytes on UDP socket: %d\n", cnt, fds[gCtx.udpSockIdx].fd);
+            cnt = sendto(gCtx.rawSock, buf, cnt, 0, NULL, 0);
+            fprintf(stdout, "Sent %d bytes on Raw socket: %d\n", cnt, fds[gCtx.rawSockIdx].fd);
+        }
+        if (fds[gCtx.rawSockIdx].revents & POLLIN)
+        {
+            char buf[8192] = { 0 };
+            int cnt = recvfrom(fds[gCtx.rawSockIdx].fd, &buf, sizeof(buf), 0, NULL, NULL);
+            fprintf(stdout, "Received %d bytes on Raw socket: %d\n", cnt, fds[gCtx.rawSockIdx].fd);
+            cnt = sendto(gCtx.udpSock, buf, cnt, 0, (struct sockaddr*) &gCtx.dstAddr, sizeof(gCtx.dstAddr));
+            fprintf(stdout, "Sent %d bytes on UDP socket [%d] to %s:%d\n", cnt, fds[gCtx.udpSockIdx].fd, inet_ntoa(gCtx.dstAddr.sin_addr), ntohs(gCtx.dstAddr.sin_port));
+        }
     }
 
-    exit_del_addr:
+exit_del_addr:
 
     if (!WcapIfaceInetAddrRemove(iface, addr))
     {
         fprintf(stdout, "Failed to remove link local address from interface: %s\n", iface);
     }
 
-    exit_fail:
+exit_fail:
 
     if (gCtx.udpSock != 0)
     {

@@ -44,6 +44,9 @@ bool WcapIfaceInfoGet(const char* ifname, WcapIfaceInfo_t* info)
 
     info->ifindex = rtnl_link_get_ifindex(link);
     strncpy(info->ifname, rtnl_link_get_name(link), sizeof(info->ifname));
+    info->flags = rtnl_link_get_flags(link);
+    info->opstate = rtnl_link_get_operstate(link);
+    info->linkstate = rtnl_link_get_carrier(link);
     memcpy(info->hwaddr, nl_addr_get_binary_addr(rtnl_link_get_addr(link)), sizeof(info->hwaddr));
     info->mtu = rtnl_link_get_mtu(link);
 
@@ -62,6 +65,7 @@ bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info)
 
     int err = 0;
     struct nl_cache* link_cache = NULL;
+    struct rtnl_link* orig = NULL;
     struct rtnl_link* link = NULL;
     struct nl_cache* addr_cache = NULL;
     struct rtnl_addr* addr = NULL;
@@ -82,31 +86,30 @@ bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info)
         return false;
     }
 
-    link = rtnl_link_get_by_name(link_cache, ifname);
+    orig = rtnl_link_get_by_name(link_cache, ifname);
+    if (orig == NULL)
+    {
+        return false;
+    }
+
+    link = rtnl_link_alloc();
     if (link == NULL)
     {
+        fprintf(stderr, "Failed to allocate new link\n");
         return false;
     }
 
-    addr = rtnl_addr_alloc();
-    if (addr == NULL)
+    rtnl_link_set_flags(link, info->flags);
+    rtnl_link_set_mtu(link, info->mtu);
+
+    err = rtnl_link_change(WcapRTNLSocket(), orig, link, 0);
+    if (err < 0)
     {
-        fprintf(stderr, "Failed to allocate address\n");
+        fprintf(stderr, "Failed to modify link: %s\n", nl_geterror(err));
         return false;
     }
 
-    rtnl_addr_set_ifindex(addr, info->ifindex);
-    err = rtnl_addr_set_local(addr, local);
-    if (err != 0)
-    {
-        fprintf(stderr, "Failed to set local address: %s\n", nl_geterror(err));
-        return false;
-    }
-
-    rtnl_addr_add(WcapRTNLSocket(), addr, 0);
-    rtnl_addr_put(addr);
-
-    return false;
+    return true;
 }
 
 bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr)
