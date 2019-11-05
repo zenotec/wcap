@@ -12,7 +12,7 @@
 #define _IFACE_H_
 
 #include <net/if.h>
-#include <netinet/if_ether.h>
+#include <linux/if_ether.h>
 
 #include "netlink.h"
 
