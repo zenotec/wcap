@@ -18,6 +18,7 @@ libnl80211_la_LDFLAGS = \
 	${NLRTNL3_LIBS}
 
 libnl80211_la_SOURCES = \
+    nl80211.h \
     nl80211.c \
     nl80211_phy.c \
     nl80211_iface.c 

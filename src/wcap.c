@@ -107,7 +107,7 @@ static bool do_server(const char* wiface, const char* iface)
     snprintf(addr, 16, "169.254.%d.%d", iface_info.hwaddr[4], iface_info.hwaddr[5]);
 
     // Add address to interface
-    if (!WcapIfaceInetAddrAdd(iface, addr))
+    if (!WcapIfaceInetAddrAdd(iface, addr, 16))
     {
         fprintf(stdout, "Failed to add link local address to interface: %s\n", iface);
     }
@@ -233,7 +233,6 @@ static bool do_server(const char* wiface, const char* iface)
 
     while (true)
     {
-        printf("Waiting on poll(%d)...\n", nfds);
         if (poll(fds, nfds, 10000) < 0)
         {
             fprintf(stderr, "Polling error occurred\n");
@@ -274,7 +273,7 @@ static bool do_server(const char* wiface, const char* iface)
 
 exit_del_addr:
 
-    if (!WcapIfaceInetAddrRemove(iface, addr))
+    if (!WcapIfaceInetAddrRemove(iface, addr, 16))
     {
         fprintf(stdout, "Failed to remove link local address from interface: %s\n", iface);
     }
@@ -358,7 +357,7 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
     snprintf(addr, 16, "169.254.%d.%d", iface_info.hwaddr[4], iface_info.hwaddr[5]);
 
     // Add address to interface
-    if (!WcapIfaceInetAddrAdd(iface, addr))
+    if (!WcapIfaceInetAddrAdd(iface, addr, 16))
     {
         fprintf(stdout, "Failed to add link local address to interface: %s\n", iface);
     }
@@ -492,7 +491,6 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
 
     while (true)
     {
-        printf("Waiting on poll(%d)...\n", nfds);
         if (poll(fds, nfds, 10000) < 0)
         {
             fprintf(stderr, "Polling error occurred\n");
@@ -530,7 +528,7 @@ bool do_client(const char* wiface, const char* iface, const char* dst)
 
 exit_del_addr:
 
-    if (!WcapIfaceInetAddrRemove(iface, addr))
+    if (!WcapIfaceInetAddrRemove(iface, addr, 16))
     {
         fprintf(stdout, "Failed to remove link local address from interface: %s\n", iface);
     }

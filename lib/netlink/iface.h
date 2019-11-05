@@ -30,7 +30,7 @@ typedef struct WcapIfaceInfo
 bool WcapIfaceInfoGet(const char* ifname, WcapIfaceInfo_t* info);
 bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info);
 
-bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr);
-bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr);
+bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr, const int prefix);
+bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr, const int prefix);
 
 #endif /* _IFACE_H_ */

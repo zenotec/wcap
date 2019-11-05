@@ -112,13 +112,14 @@ bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info)
     return true;
 }
 
-bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr)
+bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr, const int prefix)
 {
 
     int err = 0;
     WcapIfaceInfo_t info = { 0 };
     struct rtnl_addr* rtaddr = NULL;
     struct nl_addr* local = NULL;
+    struct nl_addr* bcast = NULL;
 
     fprintf(stdout, "[%d] %s(%s, %s)\n", __LINE__, __FUNCTION__, ifname, addr);
 
@@ -157,6 +158,8 @@ bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr)
         fprintf(stderr, "Failed to set local address: %s\n", nl_geterror(err));
         return false;
     }
+
+    rtnl_addr_set_prefixlen(rtaddr, prefix);
 
     err = rtnl_addr_add(WcapRTNLSocket(), rtaddr, 0);
     if (err != 0)
@@ -170,7 +173,7 @@ bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr)
     return true;
 }
 
-bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr)
+bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr, const int prefix)
 {
 
     int err = 0;
@@ -215,6 +218,8 @@ bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr)
         fprintf(stderr, "Failed to set local address: %s\n", nl_geterror(err));
         return false;
     }
+
+    rtnl_addr_set_prefixlen(rtaddr, prefix);
 
     err = rtnl_addr_delete(WcapRTNLSocket(), rtaddr, 0);
     if (err != 0)

@@ -17,6 +17,10 @@ libnetlink_la_LDFLAGS = \
 	${NLRTNL3_LIBS}
 
 libnetlink_la_SOURCES = \
+    netlink.h \
     netlink.c \
+	route.h \
 	route.c \
+	iface.h \
 	iface.c
+	
