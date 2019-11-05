@@ -1,6 +1,6 @@
 SUBDIRS = netlink nl80211
 
-lib_LTLIBRARIES = libwcap.la
+noinst_LTLIBRARIES = libwcap.la
 
 # Where to install the headers on the system
 libwcap_ladir = $(includedir)/zutils
