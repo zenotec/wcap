@@ -24,6 +24,8 @@ static int _get_valid_cb(struct nl_msg* msg, void* arg)
     struct nlmsghdr *nlhdr = nlmsg_hdr(msg);
     struct genlmsghdr *gnlh = nlmsg_data(nlhdr);
 
+    fprintf(stdout, "[%d] %s(%p)\n", __LINE__, __FUNCTION__, info);
+
     // Parse all the attributes into the attribute table
     nla_parse(tb, CTRL_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
@@ -170,12 +172,22 @@ bool WcapNL80211WifaceGet(const char* ifname, WcapWifaceInfo_t* info)
 
     struct nl_msg* msg = NULL;
 
+//    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
+
     // Get interface information
     if (!WcapIfaceInfoGet(ifname, &info->iface))
     {
         // Don't print error message because the caller may only want to check if
         //   the interface exists or not
         return false;
+    }
+
+    // Test for hwsim interface; It does not technically have a PHY and will fail
+    if (strstr(ifname, "hwsim") == ifname)
+    {
+        info->ifindex = info->iface.ifindex;
+        strcpy(info->ifname, info->iface.ifname);
+        return true;
     }
 
     // Install callback
@@ -226,8 +238,6 @@ bool WcapNL80211WifaceGet(const char* ifname, WcapWifaceInfo_t* info)
         fprintf(stderr, "Error restoring default callback\n");
         return false;
     }
-
-    fprintf(stdout, "[%d] %s()\n", __LINE__, __FUNCTION__);
 
     return WcapNL80211PhyInfoGet(info->phy.phyindex, &info->phy);
 

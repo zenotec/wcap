@@ -319,7 +319,7 @@ bool WcapNetlinkRecvMsg(const uint8_t proto)
         }
     }
 
-    return true;
+    return (!nlCtx[proto].cb.err && !!retries);
 
 }
 

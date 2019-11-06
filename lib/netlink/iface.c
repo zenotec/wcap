@@ -21,12 +21,20 @@ bool WcapIfaceInfoGet(const char* ifname, WcapIfaceInfo_t* info)
     struct nl_cache* addr_cache = NULL;
     struct rtnl_link* link = NULL;
 
-    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
+//    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
 
     if (!ifname || !info)
     {
         return false;
     }
+
+    // Test for presence of device by looking up interface index
+    info->ifindex = if_nametoindex(ifname);
+    if (!info->ifindex)
+    {
+        return false;
+    }
+    strncpy(info->ifname, ifname, sizeof(info->ifname));
 
     // Either choice, the result below is a mac address
     err = rtnl_link_alloc_cache(WcapRTNLSocket(), AF_UNSPEC, &link_cache);
@@ -42,14 +50,13 @@ bool WcapIfaceInfoGet(const char* ifname, WcapIfaceInfo_t* info)
         return false;
     }
 
-    info->ifindex = rtnl_link_get_ifindex(link);
-    strncpy(info->ifname, rtnl_link_get_name(link), sizeof(info->ifname));
     info->flags = rtnl_link_get_flags(link);
     info->opstate = rtnl_link_get_operstate(link);
     info->linkstate = rtnl_link_get_carrier(link);
     memcpy(info->hwaddr, nl_addr_get_binary_addr(rtnl_link_get_addr(link)), sizeof(info->hwaddr));
     info->mtu = rtnl_link_get_mtu(link);
 
+    // Setup to query for IP address
     err = rtnl_addr_alloc_cache(WcapRTNLSocket(), &addr_cache);
     if (err != 0)
     {
@@ -71,7 +78,7 @@ bool WcapIfaceInfoSet(const char* ifname, WcapIfaceInfo_t* info)
     struct rtnl_addr* addr = NULL;
     struct nl_addr* local = NULL;
 
-    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
+//    fprintf(stdout, "[%d] %s(%s, %p)\n", __LINE__, __FUNCTION__, ifname, info);
 
     if (!ifname || !info)
     {
@@ -121,7 +128,7 @@ bool WcapIfaceInetAddrAdd(const char *ifname, const char* addr, const int prefix
     struct nl_addr* local = NULL;
     struct nl_addr* bcast = NULL;
 
-    fprintf(stdout, "[%d] %s(%s, %s)\n", __LINE__, __FUNCTION__, ifname, addr);
+//    fprintf(stdout, "[%d] %s(%s, %s)\n", __LINE__, __FUNCTION__, ifname, addr);
 
     if (!ifname || !addr)
     {
@@ -181,7 +188,7 @@ bool WcapIfaceInetAddrRemove(const char *ifname, const char* addr, const int pre
     struct rtnl_addr* rtaddr = NULL;
     struct nl_addr* local = NULL;
 
-    fprintf(stdout, "[%d] %s(%s, %s)\n", __LINE__, __FUNCTION__, ifname, addr);
+//    fprintf(stdout, "[%d] %s(%s, %s)\n", __LINE__, __FUNCTION__, ifname, addr);
 
     if (!ifname || !addr)
     {
